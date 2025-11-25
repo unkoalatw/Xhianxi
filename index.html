@@ -2,84 +2,496 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>象棋 (極簡版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>象棋 (機核覺醒版)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 引入 Orbitron (科技英文) 與 Noto Sans TC (黑體中文) -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+TC:wght@500;700&display=swap" rel="stylesheet">
+    
     <style>
+        :root {
+            /* 配色升級：更高對比 */
+            --neon-red: #ff3366;
+            --neon-blue: #00e5ff;
+            --neon-green: #39ff14;
+            --neon-yellow: #fcee0a;
+            
+            --bg-color: #020205;
+            --grid-line: rgba(0, 229, 255, 0.15);
+            --glass-bg: rgba(10, 20, 30, 0.6);
+            
+            /* 尺寸變數 */
+            --board-max-width: 500px;
+            --board-width: min(94vw, var(--board-max-width));
+            --cell-size: calc(var(--board-width) / 9);
+            --piece-size: calc(var(--cell-size) * 0.82);
+        }
+
         body { 
-            font-family: sans-serif; 
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
             display: flex; 
             flex-direction: column;
             align-items: center; 
-            padding: 10px;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: #eee;
+            user-select: none;
+            overflow: hidden;
+            perspective: 1000px; /* 為全息效果做準備 */
         }
-        #info-panel {
-            font-size: 1.2em;
-            font-weight: bold;
-            margin: 10px;
-            padding: 8px 16px;
-            border-radius: 5px;
-            color: white;
+
+        /* 背景動態矩陣 */
+        .cyber-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(0, 229, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg) translateY(-100px) scale(2);
+            animation: grid-move 20s linear infinite;
+            z-index: -2;
+            opacity: 0.3;
+            pointer-events: none;
         }
-        .board-container {
-            border: 2px solid black;
+
+        .cyber-vignette {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, transparent 0%, #000 90%);
+            z-index: -1;
+            pointer-events: none;
         }
-        .board-table {
-            border-collapse: collapse;
-            background-color: #f3dcb6;
+
+        @keyframes grid-move {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0) scale(2); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(50px) scale(2); }
         }
-        .board-table td {
-            width: 35px;
-            height: 35px;
-            border: 1px solid #a16207;
-            text-align: center;
-            vertical-align: middle;
-            font-size: 24px;
-            font-weight: bold;
+
+        /* 標題與資訊區 */
+        .header-ui {
+            width: var(--board-width);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            background: var(--glass-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-left: 4px solid var(--neon-blue);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .turn-display {
+            font-size: 0.9rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            text-shadow: 0 0 8px currentColor;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* 戰俘區 - 能量條風格 */
+        .graveyard-panel {
+            width: var(--board-width);
+            height: 36px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .grave-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 0 5px;
+            position: relative;
+        }
+        .grave-box.left { margin-right: 10px; border-left: 2px solid var(--neon-blue); }
+        .grave-box.right { margin-left: 10px; justify-content: flex-end; border-right: 2px solid var(--neon-red); }
+
+        .captured-unit {
+            width: 20px; height: 20px;
+            margin: 0 1px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 12px; font-weight: bold;
+            color: #000;
+            background: #fff;
+            box-shadow: 0 0 8px currentColor;
+            clip-path: polygon(20% 0, 100% 0, 100% 80%, 80% 100%, 0 100%, 0 20%);
+        }
+        .captured-unit.red { background: var(--neon-red); box-shadow: 0 0 5px var(--neon-red); }
+        .captured-unit.black { background: var(--neon-blue); box-shadow: 0 0 5px var(--neon-blue); }
+
+        /* 棋盤容器 - 全息台 */
+        .holo-board {
+            position: relative;
+            width: var(--board-width);
+            height: calc(var(--board-width) * 1.115);
+            background: rgba(0, 10, 20, 0.85);
+            border: 1px solid var(--neon-blue);
+            box-shadow: 
+                0 0 30px rgba(0, 229, 255, 0.1),
+                inset 0 0 50px rgba(0, 229, 255, 0.05);
+            padding: calc(var(--cell-size) / 2);
+            box-sizing: border-box;
+            backdrop-filter: blur(8px);
+            z-index: 5;
+            
+            /* 角落裝飾 */
+            background-image: 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue));
+            background-repeat: no-repeat;
+            background-size: 2px 15px, 15px 2px;
+            background-position: top left, top left, bottom right, bottom right;
+        }
+
+        /* 掃描線特效 */
+        .holo-scan {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 229, 255, 0.05) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        /* 棋盤線條 */
+        #svg-lines {
+            position: absolute;
+            top: calc(var(--cell-size) / 2);
+            left: calc(var(--cell-size) / 2);
+            right: calc(var(--cell-size) / 2);
+            bottom: calc(var(--cell-size) / 2);
+            pointer-events: none;
+            z-index: 1;
+            filter: drop-shadow(0 0 3px var(--neon-blue));
+            opacity: 0.6;
+        }
+
+        /* 楚河漢界 */
+        .digital-river {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 92%;
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Orbitron';
+            font-size: 12px;
+            color: var(--neon-blue);
+            letter-spacing: 2px;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.8;
+        }
+        .digital-river span {
+            background: rgba(0,0,0,0.8);
+            padding: 2px 8px;
+            border: 1px solid var(--neon-blue);
+            box-shadow: 0 0 5px var(--neon-blue);
+        }
+
+        /* 棋子與網格 */
+        .grid-surface {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            z-index: 10;
+        }
+
+        .tile {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             cursor: pointer;
         }
-        .river {
-            height: 40px;
-            font-size: 18px;
-            letter-spacing: 0.5em;
-            background-color: #eaddc3;
-        }
-        .piece.red { color: #ef4444; }
-        .piece.black { color: #1f2937; }
-        .selected { background-color: #fde047; }
-        .valid-move { background-color: #86efac; }
-        .is-check {
-            border: 3px solid #dc2626 !important;
+
+        /* 棋子本體 - 優化字體清晰度 */
+        .unit {
+            width: var(--piece-size);
+            height: var(--piece-size);
             border-radius: 50%;
+            
+            /* 玻璃/晶片質感 */
+            background: radial-gradient(130% 130% at 20% 20%, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.8) 100%);
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 
+                0 0 10px rgba(0,0,0,0.5),
+                inset 0 0 10px rgba(255,255,255,0.05);
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 20;
+            
+            /* 字體優化重點 */
+            font-family: 'Noto Sans TC', sans-serif;
+            font-weight: 700; /* 改為 Bold，不要 900 */
+            font-size: calc(var(--piece-size) * 0.6);
+            
+            /* 文字改為亮白色，搭配外發光，解決看不清楚的問題 */
+            color: #ffffff; 
+            text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+            
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        #reset-button {
-            margin-top: 15px;
-            padding: 10px 20px;
-            font-size: 1em;
+
+        /* 棋子陣營色 - 用在外框和文字發光上 */
+        .unit.red { 
+            border-color: var(--neon-red); 
+            color: #ffe6ea; /* 微粉白 */
+            text-shadow: 0 0 5px var(--neon-red), 0 0 15px var(--neon-red);
+            box-shadow: inset 0 0 15px rgba(255, 51, 102, 0.3);
+        }
+        
+        .unit.black { 
+            border-color: var(--neon-blue); 
+            color: #e6ffff; /* 微藍白 */
+            text-shadow: 0 0 5px var(--neon-blue), 0 0 15px var(--neon-blue);
+            box-shadow: inset 0 0 15px rgba(0, 229, 255, 0.3);
+        }
+
+        /* 選中特效：旋轉鎖定圈 */
+        .tile.selected .unit {
+            transform: scale(1.1);
+            z-index: 100;
+            box-shadow: 0 0 30px currentColor;
+        }
+        
+        .tile.selected::before {
+            content: '';
+            position: absolute;
+            width: 120%; height: 120%;
+            border: 2px dashed #fff;
+            border-radius: 50%;
+            animation: spin-target 4s linear infinite;
+            z-index: 5;
+            opacity: 0.5;
+        }
+
+        @keyframes spin-target { from {transform: rotate(0deg);} to {transform: rotate(360deg);} }
+
+        /* 移動提示：科技標記 */
+        .tile.valid::after {
+            content: '';
+            width: 8px; height: 8px;
+            background: var(--neon-green);
+            box-shadow: 0 0 10px var(--neon-green);
+            transform: rotate(45deg);
+        }
+
+        /* 吃子提示：紅框鎖定 */
+        .tile.valid:has(.unit)::after {
+            width: 100%; height: 100%;
+            background: transparent;
+            border: 2px solid var(--neon-red);
+            box-shadow: 0 0 15px var(--neon-red), inset 0 0 15px var(--neon-red);
+            transform: none;
+            animation: lock-blink 0.5s infinite alternate;
+        }
+        @keyframes lock-blink { from {opacity: 0.5;} to {opacity: 1;} }
+
+        /* 最後一步軌跡 */
+        .last-move-bg {
+            position: absolute;
+            width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px dashed rgba(255,255,255,0.3);
+        }
+
+        /* 控制按鈕區 */
+        .ctrl-panel {
+            margin-top: 25px;
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .cyber-btn {
+            background: transparent;
+            color: var(--neon-blue);
+            border: 1px solid var(--neon-blue);
+            padding: 10px 24px;
+            font-family: 'Orbitron';
+            font-size: 14px;
+            letter-spacing: 1px;
             cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: 0.3s;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
         }
+
+        .cyber-btn:hover:not(:disabled) {
+            background: rgba(0, 229, 255, 0.2);
+            box-shadow: 0 0 20px var(--neon-blue);
+            text-shadow: 0 0 5px #fff;
+        }
+
+        .cyber-btn:disabled {
+            border-color: #555; color: #555; cursor: not-allowed;
+        }
+
+        .cyber-btn.primary {
+            border-color: var(--neon-yellow);
+            color: var(--neon-yellow);
+        }
+        .cyber-btn.primary:hover {
+            background: rgba(252, 238, 10, 0.2);
+            box-shadow: 0 0 20px var(--neon-yellow);
+        }
+
+        /* 將軍特效 */
+        .is-check {
+            background: #300 !important;
+            border-color: #f00 !important;
+            box-shadow: 0 0 30px #f00 !important;
+            animation: shake 0.5s infinite;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translate(0,0); }
+            25% { transform: translate(-2px, 2px); }
+            75% { transform: translate(2px, -2px); }
+        }
+
+        /* 勝利畫面 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+            opacity: 0; pointer-events: none; transition: 0.5s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            border: 2px solid var(--neon-green);
+            padding: 40px;
+            text-align: center;
+            background: #000;
+            box-shadow: 0 0 50px var(--neon-green);
+            transform: scale(0.8); transition: 0.3s;
+        }
+        .modal-overlay.active .modal-box { transform: scale(1); }
+
     </style>
 </head>
 <body>
 
-    <h1 style="margin: 0;">象棋</h1>
-    <div id="info-panel"></div>
-    <div id="board-container"></div>
-    <button id="reset-button">重新開始</button>
+    <div class="cyber-bg"></div>
+    <div class="cyber-vignette"></div>
+
+    <div class="header-ui">
+        <h1>NEURAL CHESS</h1>
+        <div class="turn-display" id="turn-badge" style="color: var(--neon-red);">
+            RED: ACTIVE
+        </div>
+    </div>
+
+    <div class="graveyard-panel">
+        <div class="grave-box left" id="grave-red"></div>
+        <div class="grave-box right" id="grave-black"></div>
+    </div>
+
+    <div class="holo-board" id="board-container">
+        <div class="holo-scan"></div>
+        <div id="svg-lines"></div>
+        <div class="digital-river">
+            <span>NETWORK</span>
+            <span>RIVER</span>
+        </div>
+        <div class="grid-surface" id="grid"></div>
+    </div>
+
+    <div class="ctrl-panel">
+        <button class="cyber-btn" id="btn-undo" disabled>REWIND_DATA</button>
+        <button class="cyber-btn primary" id="btn-reset">SYSTEM_RESET</button>
+    </div>
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal-box">
+            <h2 style="color:var(--neon-green); font-size:2rem; margin:0 0 10px 0;">MISSION COMPLETE</h2>
+            <div id="modal-msg" style="color:#fff; font-family:monospace; margin-bottom:20px;">TARGET DESTROYED</div>
+            <button class="cyber-btn primary" onclick="resetGame()">REBOOT</button>
+        </div>
+    </div>
 
 <script>
-    const boardContainer = document.getElementById('board-container');
-    const infoPanel = document.getElementById('info-panel');
-    const resetButton = document.getElementById('reset-button');
+    // --- Audio Sys (Synth) ---
+    const Sfx = {
+        ctx: null,
+        init() { if(!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)(); },
+        play(type) {
+            this.init();
+            if(this.ctx.state==='suspended') this.ctx.resume();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            
+            if(type==='move') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, t);
+                osc.frequency.exponentialRampToValueAtTime(1200, t+0.1);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t+0.1);
+                osc.start(t); osc.stop(t+0.1);
+            } else if(type==='capture') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, t);
+                osc.frequency.linearRampToValueAtTime(50, t+0.2);
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+                osc.start(t); osc.stop(t+0.2);
+            } else if(type==='win') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, t);
+                osc.frequency.setValueAtTime(554, t+0.1);
+                osc.frequency.setValueAtTime(659, t+0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t+1);
+                osc.start(t); osc.stop(t+1);
+            }
+        }
+    };
 
+    // --- Game Logic ---
     const PIECES = {
         'k': { name: '將', color: 'black' }, 'g': { name: '士', color: 'black' }, 'e': { name: '象', color: 'black' },
         'h': { name: '馬', color: 'black' }, 'r': { name: '車', color: 'black' }, 'c': { name: '包', color: 'black' },
         'p': { name: '卒', color: 'black' },
         'K': { name: '帥', color: 'red' },   'G': { name: '仕', color: 'red' },   'E': { name: '相', color: 'red' },
-        'H': { name: '馬', color: 'red' },   'R': { name: '俥', color: 'red' },   'C': { name: '炮', color: 'red' },
+        'H': { name: '傌', color: 'red' },   'R': { name: '俥', color: 'red' },   'C': { name: '炮', color: 'red' },
         'P': { name: '兵', color: 'red' }
     };
-
+    
     const initialBoard = [
         ['r', 'h', 'e', 'g', 'k', 'g', 'e', 'h', 'r'],
         [null, null, null, null, null, null, null, null, null],
@@ -94,136 +506,220 @@
     ];
 
     let board = [];
-    let currentPlayer = 'red';
-    let selectedPiece = null;
+    let turn = 'red';
+    let selected = null;
     let validMoves = [];
-    let isGameOver = false;
+    let history = [];
+    let lastMove = null;
+    let grave = { red: [], black: [] };
+    let locked = false;
 
-    function initGame() {
+    // --- DOM ---
+    const gridEl = document.getElementById('grid');
+    const svgEl = document.getElementById('svg-lines');
+    const turnBadge = document.getElementById('turn-badge');
+    const graveRed = document.getElementById('grave-red');
+    const graveBlack = document.getElementById('grave-black');
+    const modal = document.getElementById('modal');
+
+    function init() {
+        drawLines();
+        resetGame();
+        document.getElementById('btn-reset').onclick = resetGame;
+        document.getElementById('btn-undo').onclick = undo;
+    }
+
+    function resetGame() {
         board = JSON.parse(JSON.stringify(initialBoard));
-        currentPlayer = 'red';
-        selectedPiece = null;
+        turn = 'red';
+        selected = null;
         validMoves = [];
-        isGameOver = false;
-        renderBoard();
-        updateInfoPanel();
+        history = [];
+        lastMove = null;
+        grave = { red: [], black: [] };
+        locked = false;
+        modal.classList.remove('active');
+        render();
+        updateUI();
     }
 
-    function renderBoard() {
-        let table = document.createElement('table');
-        table.className = 'board-table';
+    function drawLines() {
+        const ns = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(ns, "svg");
+        svg.style.width = "100%"; svg.style.height = "100%";
+        
+        const c = "rgba(0, 229, 255, 0.5)"; 
+        const mk = (x1, y1, x2, y2) => {
+            const l = document.createElementNS(ns, "line");
+            l.setAttribute("x1", x1); l.setAttribute("y1", y1);
+            l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+            l.setAttribute("stroke", c);
+            l.setAttribute("stroke-width", "1");
+            return l;
+        };
 
-        for (let r = 0; r < 10; r++) {
-            // 插入楚河漢界
-            if (r === 5) {
-                let riverRow = table.insertRow();
-                let riverCell = riverRow.insertCell();
-                riverCell.colSpan = 9;
-                riverCell.className = 'river';
-                riverCell.innerHTML = '楚 河 漢 界';
+        for(let i=0; i<10; i++) {
+            const y = (i/9*100)+"%";
+            svg.appendChild(mk("0%", y, "100%", y));
+        }
+        for(let i=0; i<9; i++) {
+            const x = (i/8*100)+"%";
+            if(i===0 || i===8) svg.appendChild(mk(x,"0%",x,"100%"));
+            else {
+                svg.appendChild(mk(x,"0%",x,"44.44%"));
+                svg.appendChild(mk(x,"55.55%",x,"100%"));
             }
+        }
+        // X shapes
+        const xs = [
+            ["37.5%","0%","62.5%","22.22%"], ["62.5%","0%","37.5%","22.22%"],
+            ["37.5%","77.77%","62.5%","100%"], ["62.5%","77.77%","37.5%","100%"]
+        ];
+        xs.forEach(p => svg.appendChild(mk(...p)));
+        svgEl.innerHTML = '';
+        svgEl.appendChild(svg);
+    }
 
-            let row = table.insertRow();
-            for (let c = 0; c < 9; c++) {
-                let cell = row.insertCell();
-                cell.dataset.r = r;
-                cell.dataset.c = c;
+    function render() {
+        gridEl.innerHTML = '';
+        
+        for(let r=0; r<10; r++) {
+            for(let c=0; c<9; c++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
                 
-                const pieceId = board[r][c];
-                const pieceSpan = document.createElement('span');
+                // Last Move
+                if(lastMove && ((lastMove.f[0]===r && lastMove.f[1]===c) || (lastMove.t[0]===r && lastMove.t[1]===c))) {
+                    const lm = document.createElement('div');
+                    lm.className = 'last-move-bg';
+                    tile.appendChild(lm);
+                }
 
-                if (pieceId) {
-                    const pieceInfo = PIECES[pieceId];
-                    pieceSpan.textContent = pieceInfo.name;
-                    pieceSpan.className = `piece ${pieceInfo.color}`;
+                // Selection
+                if(selected && selected.r===r && selected.c===c) {
+                    tile.classList.add('selected');
+                }
 
-                    // 標示被將軍的將/帥
-                    const kingPos = findKing(pieceInfo.color, board);
-                    if (kingPos && pieceId.toLowerCase() === 'k' && isInCheck(pieceInfo.color, board)) {
-                        pieceSpan.classList.add('is-check');
-                    }
-                    cell.appendChild(pieceSpan);
+                // Valid Move
+                if(validMoves.some(m => m[0]===r && m[1]===c)) {
+                    tile.classList.add('valid');
+                    tile.onclick = (e) => { e.stopPropagation(); move(r, c); };
                 } else {
-                    cell.innerHTML = '┼'; // 用符號表示交叉點
-                    cell.style.color = '#c9ab81';
+                    tile.onclick = () => select(r, c);
                 }
 
-                // 標示選中的棋子
-                if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) {
-                    cell.classList.add('selected');
+                // Piece
+                const pid = board[r][c];
+                if(pid) {
+                    const p = document.createElement('div');
+                    p.className = `unit ${PIECES[pid].color}`;
+                    p.innerText = PIECES[pid].name;
+                    
+                    // Check Animation
+                    if(pid.toLowerCase()==='k' && isInCheck(PIECES[pid].color, board)) {
+                        p.classList.add('is-check');
+                    }
+                    tile.appendChild(p);
                 }
-
-                // 標示可移動位置
-                if (validMoves.some(move => move[0] === r && move[1] === c)) {
-                    cell.classList.add('valid-move');
-                }
-
-                cell.addEventListener('click', () => onSquareClick(r, c));
+                gridEl.appendChild(tile);
             }
         }
-        boardContainer.innerHTML = '';
-        boardContainer.appendChild(table);
     }
 
-    function onSquareClick(r, c) {
-        if (isGameOver) return;
+    function updateUI() {
+        const isRed = turn === 'red';
+        turnBadge.innerText = isRed ? "RED: ACTIVE" : "BLUE: ACTIVE";
+        turnBadge.style.color = isRed ? "var(--neon-red)" : "var(--neon-blue)";
+        document.getElementById('btn-undo').disabled = history.length === 0;
 
-        if (selectedPiece && validMoves.some(move => move[0] === r && move[1] === c)) {
-            movePiece(selectedPiece.r, selectedPiece.c, r, c);
-            return;
-        }
+        renderGrave(graveRed, grave.red, 'black');
+        renderGrave(graveBlack, grave.black, 'red');
+    }
 
-        const pieceId = board[r][c];
-        if (pieceId && PIECES[pieceId].color === currentPlayer) {
-            selectedPiece = { r, c, id: pieceId, info: PIECES[pieceId] };
-            validMoves = getValidMoves(r, c, pieceId, board);
+    function renderGrave(el, list, cls) {
+        el.innerHTML = '';
+        list.forEach(pid => {
+            const d = document.createElement('div');
+            d.className = `captured-unit ${cls}`;
+            d.innerText = PIECES[pid].name;
+            el.appendChild(d);
+        });
+    }
+
+    function select(r, c) {
+        if(locked) return;
+        const pid = board[r][c];
+        if(pid && PIECES[pid].color === turn) {
+            selected = {r, c};
+            validMoves = getValidMoves(r, c, pid, board);
+            render();
         } else {
-            selectedPiece = null;
+            selected = null;
             validMoves = [];
+            render();
         }
-        renderBoard();
     }
 
-    function movePiece(fromR, fromC, toR, toC) {
-        board[toR][toC] = board[fromR][fromC];
-        board[fromR][fromC] = null;
-        selectedPiece = null;
+    async function move(tr, tc) {
+        if(locked) return;
+        locked = true;
+        
+        const fr = selected.r, fc = selected.c;
+        const mover = board[fr][fc];
+        const target = board[tr][tc];
+
+        // Save State
+        history.push({
+            board: JSON.parse(JSON.stringify(board)),
+            turn,
+            grave: JSON.parse(JSON.stringify(grave)),
+            lastMove
+        });
+
+        // Update
+        board[tr][tc] = mover;
+        board[fr][fc] = null;
+        lastMove = { f:[fr,fc], t:[tr,tc] };
+
+        if(target) {
+            Sfx.play('capture');
+            if(PIECES[target].color==='red') grave.black.push(target);
+            else grave.red.push(target);
+        } else {
+            Sfx.play('move');
+        }
+
+        turn = turn === 'red' ? 'black' : 'red';
+        selected = null;
         validMoves = [];
-        currentPlayer = (currentPlayer === 'red') ? 'black' : 'red';
-        renderBoard();
-        updateInfoPanel();
-        checkGameState();
-    }
+        
+        updateUI();
+        render();
 
-    function updateInfoPanel() {
-        const playerText = currentPlayer === 'red' ? '紅方' : '黑方';
-        infoPanel.style.backgroundColor = currentPlayer === 'red' ? '#ef4444' : '#1f2937';
-        infoPanel.textContent = `輪到 ${playerText} 行棋`;
-        if (isInCheck(currentPlayer, board)) {
-            infoPanel.textContent += ' (將軍！)';
+        if(!hasMoves(turn, board)) {
+            const winner = turn === 'red' ? 'BLUE' : 'RED';
+            Sfx.play('win');
+            document.getElementById('modal-msg').innerText = winner + " WINS";
+            modal.classList.add('active');
         }
+        
+        locked = false;
     }
 
-    function checkGameState() {
-        if (!hasAnyValidMoves(currentPlayer, board)) {
-            isGameOver = true;
-            const opponentColor = currentPlayer === 'red' ? 'black' : 'red';
-            const opponentName = opponentColor === 'red' ? '紅方' : '黑方';
-            const currentPlayerName = currentPlayer === 'red' ? '紅方' : '黑方';
-            const reason = isInCheck(currentPlayer, board) ? '將死' : '困斃';
-            const message = reason === '將死' 
-                ? `${opponentName}獲勝！ (${reason})` 
-                : `和棋！ (${currentPlayerName}${reason})`;
-            
-            // 使用內建的 alert，最簡單可靠
-            setTimeout(() => {
-                alert(message);
-                infoPanel.textContent = "遊戲結束";
-            }, 100);
-        }
+    function undo() {
+        if(history.length===0 || locked) return;
+        const s = history.pop();
+        board = s.board;
+        turn = s.turn;
+        grave = s.grave;
+        lastMove = s.lastMove;
+        selected = null;
+        validMoves = [];
+        render();
+        updateUI();
     }
 
-    // --- 所有移動規則和判斷邏輯 (與之前版本相同) ---
+    // --- Rules ---
     function getValidMoves(r,c,p,b){const t=p.toLowerCase();let m=[];switch(t){case'k':m=getKingMoves(r,c,p,b);break;case'g':m=getGuardMoves(r,c,p,b);break;case'e':m=getElephantMoves(r,c,p,b);break;case'h':m=getHorseMoves(r,c,p,b);break;case'r':m=getRookMoves(r,c,p,b);break;case'c':m=getCannonMoves(r,c,p,b);break;case'p':m=getPawnMoves(r,c,p,b)}return m.filter(v=>{const[R,C]=v;const B=JSON.parse(JSON.stringify(b));B[R][C]=B[r][c];B[r][c]=null;return!isInCheck(PIECES[p].color,B)})}
     function isOwnPiece(r,c,o,b){const p=b[r][c];return p&&PIECES[p].color===o}
     function isOpponentPiece(r,c,o,b){const p=b[r][c];return p&&PIECES[p].color!==o}
@@ -237,11 +733,9 @@
     function findKing(o,b){const p=o==='red'?'K':'k';for(let r=0;r<10;r++)for(let c=0;c<9;c++)if(b[r][c]===p)return{r,c};return null}
     function isInCheck(o,b){const a=findKing(o,b);if(!a)return!0;const k=o==='red'?'black':'red';for(let r=0;r<10;r++)for(let c=0;c<9;c++){const p=b[r][c];if(p&&PIECES[p].color===k){const m=getRawValidMoves(r,c,p,b);if(m.some(v=>v[0]===a.r&&v[1]===a.c))return!0}}return!1}
     function getRawValidMoves(r,c,p,b){const t=p.toLowerCase();switch(t){case'k':return getKingMoves(r,c,p,b);case'g':return getGuardMoves(r,c,p,b);case'e':return getElephantMoves(r,c,p,b);case'h':return getHorseMoves(r,c,p,b);case'r':return getRookMoves(r,c,p,b);case'c':return getCannonMoves(r,c,p,b);case'p':return getPawnMoves(r,c,p,b)}return[]}
-    function hasAnyValidMoves(o,b){for(let r=0;r<10;r++)for(let c=0;c<9;c++){const p=b[r][c];if(p&&PIECES[p].color===o&&getValidMoves(r,c,p,b).length>0)return!0}return!1}
+    function hasMoves(o,b){for(let r=0;r<10;r++)for(let c=0;c<9;c++){const p=b[r][c];if(p&&PIECES[p].color===o&&getValidMoves(r,c,p,b).length>0)return!0}return!1}
 
-    resetButton.addEventListener('click', initGame);
-    initGame();
+    init();
 </script>
-
 </body>
 </html>
