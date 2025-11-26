@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>西洋棋 (機核覺醒版)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 引入 Orbitron (科技英文) 與 Noto Sans TC (黑體中文) -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+TC:wght@500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* 陣營定義：Blue(白棋/先手), Red(黑棋/後手) */
+            --neon-blue: #00e5ff;   /* Player 1 Color */
+            --neon-red: #ff3366;    /* Player 2 Color */
+            
+            --neon-green: #39ff14;  /* Valid Moves */
+            --neon-yellow: #fcee0a; /* Selection */
+            
+            --bg-color: #020205;
+            --glass-bg: rgba(10, 20, 30, 0.6);
+            
+            /* 尺寸變數 */
+            --board-max-width: 500px;
+            --board-width: min(94vw, var(--board-max-width));
+            /* 8x8 棋盤，每格大小 */
+            --cell-size: calc(var(--board-width) / 8);
+            --piece-size: calc(var(--cell-size) * 0.75);
+        }
+
+        body { 
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: #eee;
+            user-select: none;
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        /* --- 背景動態矩陣 --- */
+        .cyber-bg {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(0, 229, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg) translateY(-100px) scale(2);
+            animation: grid-move 20s linear infinite;
+            z-index: -2;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .cyber-vignette {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, transparent 0%, #000 90%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        @keyframes grid-move {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0) scale(2); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(50px) scale(2); }
+        }
+
+        /* --- 標題與資訊區 --- */
+        .header-ui {
+            width: var(--board-width);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            background: var(--glass-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-left: 4px solid var(--neon-blue);
+            backdrop-filter: blur(4px);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            position: relative;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .turn-display {
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            text-shadow: 0 0 8px currentColor;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            transition: 0.3s;
+        }
+
+        /* --- 戰俘區 --- */
+        .graveyard-panel {
+            width: var(--board-width);
+            height: 32px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .grave-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 0 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .grave-box.left { margin-right: 5px; border-left: 2px solid var(--neon-blue); }
+        .grave-box.right { margin-left: 5px; justify-content: flex-end; border-right: 2px solid var(--neon-red); }
+
+        .captured-unit {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            margin-right: -2px; /* Overlap slightly to save space */
+            filter: drop-shadow(0 0 2px currentColor);
+        }
+        .captured-unit.blue-side { color: var(--neon-blue); } /* Captured BY blue (so they are red pieces) */
+        .captured-unit.red-side { color: var(--neon-red); }   /* Captured BY red (so they are blue pieces) */
+
+        /* --- 棋盤容器 --- */
+        .holo-board {
+            position: relative;
+            width: var(--board-width);
+            height: var(--board-width); /* Square for Chess */
+            background: rgba(0, 10, 20, 0.85);
+            border: 1px solid var(--neon-blue);
+            box-shadow: 
+                0 0 30px rgba(0, 229, 255, 0.1),
+                inset 0 0 50px rgba(0, 229, 255, 0.05);
+            /* padding removed to fit grid exactly */
+            padding: 2px; 
+            box-sizing: border-box;
+            backdrop-filter: blur(8px);
+            z-index: 5;
+            
+            /* 角落裝飾 */
+            background-image: 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue)), 
+                linear-gradient(var(--neon-blue), var(--neon-blue));
+            background-repeat: no-repeat;
+            background-size: 2px 15px, 15px 2px;
+            background-position: top left, top left, bottom right, bottom right;
+        }
+
+        .holo-scan {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 229, 255, 0.05) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* --- 網格與棋盤格 --- */
+        .grid-surface {
+            width: 100%; height: 100%;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            z-index: 10;
+            position: relative;
+        }
+
+        .tile {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-sizing: border-box; /* 確保邊框算在寬度內 */
+            border: 1px solid rgba(0, 229, 255, 0.1); /* 增加格線 */
+        }
+
+        /* 棋盤格顏色 - 增加對比度以顯示格線 */
+        .tile.dark { background-color: rgba(255, 255, 255, 0.06); } /* 調亮一點點 */
+        .tile.light { background-color: transparent; }
+        
+        /* 坐標標示 (Rank & File) */
+        .coord {
+            position: absolute;
+            font-size: 8px;
+            color: rgba(255,255,255,0.4); /* 增加亮度 */
+            pointer-events: none;
+        }
+        .coord.rank { top: 2px; left: 3px; }
+        .coord.file { bottom: 0px; right: 3px; }
+
+        /* --- 棋子 --- */
+        .unit {
+            width: var(--piece-size);
+            height: var(--piece-size);
+            border-radius: 50%;
+            
+            /* 玻璃/晶片質感 */
+            background: radial-gradient(130% 130% at 20% 20%, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0.8) 100%);
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 
+                0 0 5px rgba(0,0,0,0.5),
+                inset 0 0 5px rgba(255,255,255,0.05);
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 20;
+            
+            font-family: 'Noto Sans TC', sans-serif;
+            font-size: calc(var(--piece-size) * 0.75); /* Chess icons need to be large */
+            line-height: 1;
+            
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 陣營顏色定義 */
+        /* White pieces -> Neon Blue (Cyber) */
+        .unit.white { 
+            border-color: var(--neon-blue); 
+            color: #e6ffff; 
+            text-shadow: 0 0 5px var(--neon-blue), 0 0 10px var(--neon-blue);
+            box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+        
+        /* Black pieces -> Neon Red (Intruder) */
+        .unit.black { 
+            border-color: var(--neon-red); 
+            color: #ffe6ea; 
+            text-shadow: 0 0 5px var(--neon-red), 0 0 10px var(--neon-red);
+            box-shadow: inset 0 0 10px rgba(255, 51, 102, 0.2);
+        }
+
+        /* 選中特效 */
+        .tile.selected .unit {
+            transform: scale(1.15);
+            z-index: 100;
+            box-shadow: 0 0 20px currentColor;
+        }
+        
+        .tile.selected::before {
+            content: '';
+            position: absolute;
+            width: 90%; height: 90%;
+            border: 2px dashed var(--neon-yellow);
+            border-radius: 50%;
+            animation: spin-target 4s linear infinite;
+            z-index: 5;
+            opacity: 0.8;
+            box-shadow: 0 0 10px var(--neon-yellow);
+        }
+
+        @keyframes spin-target { from {transform: rotate(0deg);} to {transform: rotate(360deg);} }
+
+        /* 移動提示 */
+        .tile.valid::after {
+            content: '';
+            width: 10px; height: 10px;
+            background: var(--neon-green);
+            box-shadow: 0 0 8px var(--neon-green);
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+
+        /* 吃子提示：紅框鎖定 */
+        .tile.valid:has(.unit)::after {
+            width: 100%; height: 100%;
+            background: transparent;
+            border: 2px solid var(--neon-red);
+            border-radius: 4px;
+            box-shadow: 0 0 15px var(--neon-red), inset 0 0 10px var(--neon-red);
+            transform: none;
+            animation: lock-blink 0.5s infinite alternate;
+        }
+        @keyframes lock-blink { from {opacity: 0.5;} to {opacity: 1;} }
+
+        /* 最後一步軌跡 */
+        .last-move-bg {
+            position: absolute;
+            width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* 將軍特效 */
+        .is-check {
+            background: rgba(255, 0, 0, 0.2) !important;
+            border-color: #f00 !important;
+            box-shadow: 0 0 30px #f00 !important;
+            animation: shake 0.5s infinite;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translate(0,0); }
+            25% { transform: translate(-2px, 2px); }
+            75% { transform: translate(2px, -2px); }
+        }
+
+        /* 控制面板 */
+        .ctrl-panel {
+            margin-top: 25px;
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .cyber-btn {
+            background: transparent;
+            color: var(--neon-blue);
+            border: 1px solid var(--neon-blue);
+            padding: 10px 24px;
+            font-family: 'Orbitron';
+            font-size: 14px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: 0.3s;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+
+        .cyber-btn:hover:not(:disabled) {
+            background: rgba(0, 229, 255, 0.2);
+            box-shadow: 0 0 20px var(--neon-blue);
+            text-shadow: 0 0 5px #fff;
+        }
+        
+        .cyber-btn.primary { border-color: var(--neon-yellow); color: var(--neon-yellow); }
+        .cyber-btn.primary:hover { background: rgba(252, 238, 10, 0.2); box-shadow: 0 0 20px var(--neon-yellow); }
+
+        /* 勝利 Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999;
+            opacity: 0; pointer-events: none; transition: 0.5s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            border: 2px solid var(--neon-green);
+            padding: 40px;
+            text-align: center;
+            background: #000;
+            box-shadow: 0 0 50px var(--neon-green);
+            transform: scale(0.8); transition: 0.3s;
+        }
+        .modal-overlay.active .modal-box { transform: scale(1); }
+
+    </style>
+</head>
+<body>
+
+    <div class="cyber-bg"></div>
+    <div class="cyber-vignette"></div>
+
+    <div class="header-ui">
+        <h1>WESTERN CHESS</h1>
+        <!-- 顯示當前回合 -->
+        <div class="turn-display" id="turn-badge" style="color: var(--neon-blue); border-color: var(--neon-blue);">
+            PLAYER 1: ACTIVE
+        </div>
+    </div>
+
+    <!-- 戰俘區 -->
+    <div class="graveyard-panel">
+        <div class="grave-box left" id="grave-white"></div>
+        <div class="grave-box right" id="grave-black"></div>
+    </div>
+
+    <div class="holo-board" id="board-container">
+        <div class="holo-scan"></div>
+        <div class="grid-surface" id="grid"></div>
+    </div>
+
+    <div class="ctrl-panel">
+        <button class="cyber-btn" onclick="location.href='index.html'">BACK</button>
+        <button class="cyber-btn primary" id="btn-reset">SYSTEM_RESET</button>
+    </div>
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal-box">
+            <h2 style="color:var(--neon-green); font-size:2rem; margin:0 0 10px 0;">CHECKMATE</h2>
+            <div id="modal-msg" style="color:#fff; font-family:monospace; margin-bottom:20px;">TARGET ELIMINATED</div>
+            <button class="cyber-btn primary" onclick="resetGame()">REBOOT</button>
+        </div>
+    </div>
+
+<script>
+    // --- Audio Sys (Synth) ---
+    const Sfx = {
+        ctx: null,
+        init() { if(!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)(); },
+        play(type) {
+            this.init();
+            if(this.ctx.state==='suspended') this.ctx.resume();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            
+            if(type==='move') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, t);
+                osc.frequency.exponentialRampToValueAtTime(1600, t+0.1);
+                gain.gain.setValueAtTime(0.05, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t+0.1);
+                osc.start(t); osc.stop(t+0.1);
+            } else if(type==='capture') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, t);
+                osc.frequency.linearRampToValueAtTime(50, t+0.25);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t+0.25);
+                osc.start(t); osc.stop(t+0.25);
+            } else if(type==='win') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, t);
+                osc.frequency.setValueAtTime(554, t+0.1);
+                osc.frequency.setValueAtTime(659, t+0.2);
+                gain.gain.setValueAtTime(0.1, t);
+                gain.gain.linearRampToValueAtTime(0, t+1.5);
+                osc.start(t); osc.stop(t+1.5);
+            }
+        }
+    };
+
+    // --- Chess Logic ---
+    // Pieces: White (Upper case) - Blue, Black (Lower case) - Red
+    // Board 0,0 is Top-Left (Black side). 7,0 is Bottom-Left (White side).
+    
+    const SYMBOLS = {
+        'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
+        'P': '♟', 'R': '♜', 'N': '♞', 'B': '♝', 'Q': '♛', 'K': '♚'
+    };
+
+    const initialBoard = [
+        ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+        ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
+    ];
+
+    let board = [];
+    let turn = 'white'; // 'white' (Blue, Bottom) or 'black' (Red, Top)
+    let selected = null;
+    let validMoves = [];
+    let lastMove = null;
+    let castlingRights = { white: {k:true, q:true}, black: {k:true, q:true} };
+    let enPassantTarget = null; // {r, c} or null
+    let gameOver = false;
+    let grave = { white: [], black: [] }; // Captured pieces
+
+    const gridEl = document.getElementById('grid');
+    const turnBadge = document.getElementById('turn-badge');
+    const modal = document.getElementById('modal');
+
+    function init() {
+        resetGame();
+        document.getElementById('btn-reset').onclick = resetGame;
+    }
+
+    function resetGame() {
+        board = JSON.parse(JSON.stringify(initialBoard));
+        turn = 'white';
+        selected = null;
+        validMoves = [];
+        lastMove = null;
+        castlingRights = { white: {k:true, q:true}, black: {k:true, q:true} };
+        enPassantTarget = null;
+        gameOver = false;
+        grave = { white: [], black: [] };
+        modal.classList.remove('active');
+        render();
+        updateUI();
+    }
+
+    function isWhite(piece) { return piece && piece === piece.toUpperCase(); }
+    function isBlack(piece) { return piece && piece === piece.toLowerCase(); }
+    function getPieceColor(piece) { 
+        if(!piece) return null;
+        return isWhite(piece) ? 'white' : 'black';
+    }
+
+    function render() {
+        gridEl.innerHTML = '';
+        
+        for(let r=0; r<8; r++) {
+            for(let c=0; c<8; c++) {
+                const tile = document.createElement('div');
+                const isDark = (r + c) % 2 === 1;
+                tile.className = `tile ${isDark ? 'dark' : 'light'}`;
+                
+                // Coordinates labels (Rank & File)
+                if(c === 0) {
+                    const rank = document.createElement('span');
+                    rank.className = 'coord rank';
+                    rank.innerText = 8 - r;
+                    tile.appendChild(rank);
+                }
+                if(r === 7) {
+                    const file = document.createElement('span');
+                    file.className = 'coord file';
+                    file.innerText = String.fromCharCode(97 + c);
+                    tile.appendChild(file);
+                }
+
+                // Last Move Highlight
+                if(lastMove) {
+                    if((lastMove.from.r === r && lastMove.from.c === c) || 
+                       (lastMove.to.r === r && lastMove.to.c === c)) {
+                        const lm = document.createElement('div');
+                        lm.className = 'last-move-bg';
+                        tile.appendChild(lm);
+                    }
+                }
+
+                // Selection
+                if(selected && selected.r === r && selected.c === c) {
+                    tile.classList.add('selected');
+                }
+
+                // Valid Move Indicators
+                // FIXED: Changed m.r, m.c to m.to.r, m.to.c
+                const moveIdx = validMoves.findIndex(m => m.to.r === r && m.to.c === c);
+                if(moveIdx !== -1) {
+                    tile.classList.add('valid');
+                    tile.onclick = (e) => { e.stopPropagation(); makeMove(validMoves[moveIdx]); };
+                } else {
+                    tile.onclick = () => select(r, c);
+                }
+
+                // Piece
+                const pieceChar = board[r][c];
+                if(pieceChar) {
+                    const p = document.createElement('div');
+                    const colorClass = isWhite(pieceChar) ? 'white' : 'black';
+                    p.className = `unit ${colorClass}`;
+                    p.innerText = SYMBOLS[pieceChar];
+                    
+                    // Check Indicator
+                    if(pieceChar.toLowerCase() === 'k') {
+                        const kingColor = isWhite(pieceChar) ? 'white' : 'black';
+                        if(isCheck(kingColor, board)) {
+                            p.classList.add('is-check');
+                        }
+                    }
+
+                    tile.appendChild(p);
+                }
+                gridEl.appendChild(tile);
+            }
+        }
+    }
+
+    function updateUI() {
+        const tName = turn === 'white' ? "PLAYER 1" : "PLAYER 2";
+        const tColor = turn === 'white' ? "var(--neon-blue)" : "var(--neon-red)";
+        turnBadge.innerText = `${tName}: ACTIVE`;
+        turnBadge.style.color = tColor;
+        turnBadge.style.borderColor = tColor;
+
+        // Render Graveyard
+        const gw = document.getElementById('grave-white');
+        const gb = document.getElementById('grave-black');
+        gw.innerHTML = ''; gb.innerHTML = '';
+
+        // White captured pieces (originally Black pieces, so they are red in style but stored in White's grave)
+        grave.white.forEach(p => {
+            const s = document.createElement('span');
+            s.className = 'captured-unit red-side';
+            s.innerText = SYMBOLS[p];
+            gw.appendChild(s);
+        });
+        
+        // Black captured pieces (originally White pieces, so blue)
+        grave.black.forEach(p => {
+            const s = document.createElement('span');
+            s.className = 'captured-unit blue-side';
+            s.innerText = SYMBOLS[p];
+            gb.appendChild(s);
+        });
+    }
+
+    function select(r, c) {
+        if(gameOver) return;
+        const piece = board[r][c];
+        if(!piece) {
+            selected = null; validMoves = []; render(); return;
+        }
+
+        const pColor = getPieceColor(piece);
+        if(pColor === turn) {
+            selected = {r, c};
+            validMoves = getValidMoves(r, c, piece, board);
+            render();
+        } else {
+            selected = null; validMoves = []; render();
+        }
+    }
+
+    function makeMove(move) {
+        const {r, c} = move.to;
+        const fr = move.from.r;
+        const fc = move.from.c;
+        const movingPiece = board[fr][fc];
+        const targetPiece = board[r][c];
+
+        // Capture Logic
+        if(targetPiece) {
+            Sfx.play('capture');
+            if(turn === 'white') grave.white.push(targetPiece);
+            else grave.black.push(targetPiece);
+        } else if (move.type === 'enpassant') {
+            Sfx.play('capture');
+            const capR = turn === 'white' ? r + 1 : r - 1;
+            const capP = board[capR][c];
+            if(turn === 'white') grave.white.push(capP);
+            else grave.black.push(capP);
+            board[capR][c] = null; // Remove captured pawn
+        } else {
+            Sfx.play('move');
+        }
+
+        // Move
+        board[r][c] = movingPiece;
+        board[fr][fc] = null;
+
+        // Special Moves handling
+        // 1. Castling
+        if(move.type === 'castling') {
+            if(c === 6) { // King side
+                board[r][5] = board[r][7]; board[r][7] = null;
+            } else if (c === 2) { // Queen side
+                board[r][3] = board[r][0]; board[r][0] = null;
+            }
+        }
+        
+        // 2. Promotion
+        if(move.type === 'promotion') {
+            board[r][c] = turn === 'white' ? 'Q' : 'q'; // Auto-Queen for flow
+        }
+
+        // 3. Update Castling Rights
+        if(movingPiece === 'K') castlingRights.white = {k:false, q:false};
+        if(movingPiece === 'k') castlingRights.black = {k:false, q:false};
+        if(movingPiece === 'R') {
+            if(fr===7 && fc===0) castlingRights.white.q = false;
+            if(fr===7 && fc===7) castlingRights.white.k = false;
+        }
+        if(movingPiece === 'r') {
+            if(fr===0 && fc===0) castlingRights.black.q = false;
+            if(fr===0 && fc===7) castlingRights.black.k = false;
+        }
+
+        // 4. En Passant Tracker
+        enPassantTarget = null;
+        if(movingPiece.toLowerCase() === 'p' && Math.abs(r - fr) === 2) {
+            enPassantTarget = { r: (r + fr) / 2, c: c };
+        }
+
+        // End turn
+        lastMove = { from: {r:fr, c:fc}, to: {r, c} };
+        turn = turn === 'white' ? 'black' : 'white';
+        selected = null;
+        validMoves = [];
+
+        // Game Over Check
+        if(isCheckMate(turn, board)) {
+            gameOver = true;
+            Sfx.play('win');
+            document.getElementById('modal-msg').innerText = `${turn === 'white' ? "PLAYER 2" : "PLAYER 1"} WINS`;
+            modal.classList.add('active');
+        } else if(isStalemate(turn, board)) {
+            gameOver = true;
+            document.getElementById('modal-msg').innerText = "STALEMATE / DRAW";
+            modal.classList.add('active');
+        }
+
+        updateUI();
+        render();
+    }
+
+    // --- Rules Engine ---
+
+    function getValidMoves(r, c, piece, currentBoard) {
+        let moves = getPseudoLegalMoves(r, c, piece, currentBoard, true); // True for main move generation
+        
+        // Filter moves that leave king in check
+        return moves.filter(m => {
+            const tempBoard = JSON.parse(JSON.stringify(currentBoard));
+            // Simulate move
+            tempBoard[m.to.r][m.to.c] = tempBoard[m.from.r][m.from.c];
+            tempBoard[m.from.r][m.from.c] = null;
+            if(m.type === 'enpassant') {
+                const capR = m.from.r; // Wrong logic in simulation? No, capR is target row
+                const pRow = isWhite(piece) ? m.to.r + 1 : m.to.r - 1;
+                tempBoard[pRow][m.to.c] = null;
+            }
+            
+            return !isCheck(getPieceColor(piece), tempBoard);
+        });
+    }
+
+    // Add includeCastling param to break recursion from isCheck
+    function getPseudoLegalMoves(r, c, piece, b, includeCastling = true) {
+        const type = piece.toLowerCase();
+        const color = getPieceColor(piece);
+        const moves = [];
+        
+        const add = (tr, tc, mType='normal') => {
+            if(tr>=0 && tr<8 && tc>=0 && tc<8) {
+                const target = b[tr][tc];
+                if(!target || getPieceColor(target) !== color) {
+                    moves.push({ from:{r,c}, to:{r:tr, c:tc}, type: mType });
+                }
+            }
+        };
+
+        const checkDir = (dr, dc) => {
+            let tr = r + dr, tc = c + dc;
+            while(tr>=0 && tr<8 && tc>=0 && tc<8) {
+                const target = b[tr][tc];
+                if(!target) {
+                    moves.push({ from:{r,c}, to:{r:tr, c:tc}, type: 'normal' });
+                } else {
+                    if(getPieceColor(target) !== color) {
+                        moves.push({ from:{r,c}, to:{r:tr, c:tc}, type: 'normal' });
+                    }
+                    break;
+                }
+                tr += dr; tc += dc;
+            }
+        };
+
+        if(type === 'p') {
+            const dir = color === 'white' ? -1 : 1;
+            const startRow = color === 'white' ? 6 : 1;
+            // Move 1
+            if(!b[r+dir][c]) {
+                const mType = (r+dir===0 || r+dir===7) ? 'promotion' : 'normal';
+                moves.push({ from:{r,c}, to:{r:r+dir, c:c}, type: mType });
+                // Move 2
+                if(r === startRow && !b[r+dir*2][c]) {
+                    moves.push({ from:{r,c}, to:{r:r+dir*2, c:c}, type: 'normal' });
+                }
+            }
+            // Capture
+            [c-1, c+1].forEach(tc => {
+                if(tc>=0 && tc<8) {
+                    const target = b[r+dir][tc];
+                    if(target && getPieceColor(target) !== color) {
+                        const mType = (r+dir===0 || r+dir===7) ? 'promotion' : 'normal';
+                        moves.push({ from:{r,c}, to:{r:r+dir, c:tc}, type: mType });
+                    }
+                    // En Passant
+                    if(enPassantTarget && enPassantTarget.r === r+dir && enPassantTarget.c === tc) {
+                        moves.push({ from:{r,c}, to:{r:r+dir, c:tc}, type: 'enpassant' });
+                    }
+                }
+            });
+        }
+        else if(type === 'n') {
+            [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => add(r+dr, c+dc));
+        }
+        else if(type === 'b') {
+            [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc]) => checkDir(dr,dc));
+        }
+        else if(type === 'r') {
+            [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => checkDir(dr,dc));
+        }
+        else if(type === 'q') {
+            [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => checkDir(dr,dc));
+        }
+        else if(type === 'k') {
+            [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => add(r+dr, c+dc));
+            // Castling - Only check if allowed
+            if(includeCastling && !isCheck(color, b)) {
+                const rights = color==='white' ? castlingRights.white : castlingRights.black;
+                const row = color==='white' ? 7 : 0;
+                if(rights.k && !b[row][5] && !b[row][6]) {
+                    if(!isSquareAttacked(row, 5, color, b) && !isSquareAttacked(row, 6, color, b)) {
+                         moves.push({ from:{r,c}, to:{r:row, c:6}, type: 'castling' });
+                    }
+                }
+                if(rights.q && !b[row][1] && !b[row][2] && !b[row][3]) {
+                     if(!isSquareAttacked(row, 2, color, b) && !isSquareAttacked(row, 3, color, b)) { // d1/d8 and c1/c8 must be safe? actually c1/d1 safe
+                         moves.push({ from:{r,c}, to:{r:row, c:2}, type: 'castling' });
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    function isCheck(color, b) {
+        let kPos = null;
+        for(let r=0; r<8; r++) {
+            for(let c=0; c<8; c++) {
+                const p = b[r][c];
+                if(p && getPieceColor(p) === color && p.toLowerCase() === 'k') {
+                    kPos = {r,c}; break;
+                }
+            }
+        }
+        if(!kPos) return true; // King missing?
+        return isSquareAttacked(kPos.r, kPos.c, color, b);
+    }
+
+    function isSquareAttacked(r, c, myColor, b) {
+        const enemyColor = myColor === 'white' ? 'black' : 'white';
+        // Check all enemy moves if they hit r,c
+        for(let er=0; er<8; er++) {
+            for(let ec=0; ec<8; ec++) {
+                const p = b[er][ec];
+                if(p && getPieceColor(p) === enemyColor) {
+                    // Pass FALSE to prevent recursion when checking enemy king moves
+                    const moves = getPseudoLegalMoves(er, ec, p, b, false); 
+                    
+                    // Simplified attack check: Pawn attacks differ from moves
+                    if(p.toLowerCase() === 'p') {
+                        const dir = enemyColor === 'white' ? -1 : 1;
+                        if(Math.abs(c - ec) === 1 && r === er + dir) return true;
+                    } else {
+                        if(moves.some(m => m.to.r === r && m.to.c === c)) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function isCheckMate(color, b) {
+        if(!isCheck(color, b)) return false;
+        return !hasLegalMoves(color, b);
+    }
+
+    function isStalemate(color, b) {
+        if(isCheck(color, b)) return false;
+        return !hasLegalMoves(color, b);
+    }
+
+    function hasLegalMoves(color, b) {
+        for(let r=0; r<8; r++) {
+            for(let c=0; c<8; c++) {
+                const p = b[r][c];
+                if(p && getPieceColor(p) === color) {
+                    if(getValidMoves(r, c, p, b).length > 0) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    init();
+</script>
+</body>
+</html>
