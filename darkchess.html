@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>機核覺醒：全域戰術介面 - CYBERPUNK DARK CHESS V4</title>
+    <title>機核覺醒：全域戰術介面 - CYBERPUNK DARK CHESS V5</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -40,7 +40,6 @@
         }
 
         /* --- 1. 基礎佈局 (手機 Mobile First) --- */
-        /* 預設為垂直堆疊，這對手機和平板直立模式最友善 */
         .main-interface {
             width: 100%;
             height: 100%;
@@ -48,17 +47,31 @@
             flex-direction: column;
             justify-content: space-between;
             padding: 10px;
-            /* 手機版限制寬度，避免過寬 */
             max-width: 600px; 
-        /* 戰俘區 (手機版：修正樣式，改為標籤橫向置頂) */
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 頂部與底部 */
+        .top-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 5px 10px; border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+            margin-bottom: 5px; flex-shrink: 0;
+            grid-area: top;
+        }
+        .bottom-panel {
+            flex-shrink: 0; display: flex; flex-direction: column; gap: 5px;
+            grid-area: bot;
+        }
+
+        /* 戰俘區 (手機版：橫向置頂樣式) */
         .prison-bar {
-            /* 取消固定高度，改用 min-height 讓內容撐開 */
             min-height: 65px; 
             background: rgba(2, 2, 5, 0.6); 
             border: var(--glass-border);
             margin-bottom: 5px;
             display: flex; 
-            /* 關鍵修改：改為垂直堆疊 (Column)，讓標籤跑到上方 */
             flex-direction: column; 
             justify-content: center;
             padding: 5px 10px;
@@ -69,20 +82,15 @@
         #prison-blk-container { grid-area: left; }
         #prison-red-container { grid-area: right; }
 
+        /* 標籤樣式：橫向，底部有分隔線 */
         .prison-label {
             font-size: 0.7rem; 
-            /* 關鍵修改：改回橫向書寫 */
             writing-mode: horizontal-tb; 
             width: 100%;
             color: rgba(255,255,255,0.5); 
-            /* 增加底部間距與分隔線 */
             margin-bottom: 5px;
             border-bottom: 1px solid rgba(255,255,255,0.1); 
             padding-bottom: 2px;
-            /* 清除原本豎排的邊框與間距 */
-            margin-right: 0; 
-            border-right: none; 
-            padding-right: 0;
             text-align: left;
             letter-spacing: 1px;
         }
@@ -100,7 +108,7 @@
             width: 100%;
             grid-area: mid;
             min-width: 0;
-            z-index: 10; /* 提升層級：確保棋盤永遠在最上層，不會被面板蓋住 */
+            z-index: 10; /* 確保棋盤在最上層，避免被側欄蓋住 */
         }
 
         .chess-board {
@@ -113,7 +121,7 @@
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.1);
             position: relative;
             width: 100%;
-            /* 保持比例，但允許根據高度自適應 */
+            max-width: 100%; /* 強制不超出父容器 */
             aspect-ratio: 2 / 1;
         }
 
@@ -128,7 +136,6 @@
         .piece {
             width: 85%; height: 85%; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            /* 智能字體大小：隨視窗縮放 */
             font-size: clamp(0.8rem, 3.5vw, 2rem); 
             font-weight: 700;
             position: relative; background: #000;
@@ -158,33 +165,26 @@
         .shake { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
         @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } }
 
-        /* --- 2. 平板優化 (768px - 1099px) --- */
-        /* 在這個區間，我們保持垂直佈局，但放寬寬度限制，讓棋盤更大 */
-        @media (min-width: 768px) and (max-width: 1099px) {
+        /* --- 2. 平板優化區間 (768px - 1199px) --- */
+        /* 加大垂直佈局的適用範圍，避免在 1100px 左右發生擠壓 */
+        @media (min-width: 768px) and (max-width: 1199px) {
             .main-interface {
-                max-width: 90%; /* 平板上佔比更大 */
+                max-width: 95%; 
                 padding: 20px;
             }
-            .chess-board {
-                /* 平板上棋盤可以更大 */
-                gap: 6px;
-            }
-            .prison-bar {
-                height: 60px; /* 戰俘區稍微加高 */
-            }
-            .piece {
-                font-size: 1.8rem;
-            }
+            .chess-board { gap: 6px; }
+            .prison-bar { height: 70px; }
+            .piece { font-size: 1.8rem; }
         }
 
-        /* --- 3. 真正的桌面體驗 (min-width: 1100px) --- */
-        /* 只有當螢幕真的夠寬時，才切換成帥氣的三欄式戰情室佈局 */
-        @media (min-width: 1100px) {
+        /* --- 3. 寬螢幕桌面體驗 (min-width: 1200px) --- */
+        /* 提升斷點到 1200px，確保空間足夠才切換三欄 */
+        @media (min-width: 1200px) {
             .main-interface {
                 max-width: 1600px;
                 display: grid;
-                /* 側邊欄彈性寬度，中間棋盤自適應 */
-                grid-template-columns: minmax(200px, 250px) 1fr minmax(200px, 250px); 
+                /* 縮小側邊欄最小寬度 (160px)，防止擠壓中間 */
+                grid-template-columns: minmax(160px, 220px) 1fr minmax(160px, 220px); 
                 grid-template-rows: auto 1fr auto;
                 grid-template-areas: 
                     "top top top"
@@ -196,28 +196,24 @@
 
             .prison-bar { 
                 height: 100%; 
-                flex-direction: column; 
                 width: 100%; 
                 padding: 15px 0;
                 background: rgba(2, 2, 5, 0.4);
             }
             
             .board-container {
-                width: 100%;
-                height: 100%;
-                min-width: 0; 
+                width: 100%; height: 100%; min-width: 0; 
             }
 
             .chess-board {
-                width: 100%;
-                max-width: 1200px; 
+                width: 100%; max-width: 1200px; 
                 aspect-ratio: 2 / 1;
-                gap: 10px; /* 電腦版間距更寬鬆 */
+                gap: 10px; 
             }
             
-            .piece { font-size: 2.5rem; } /* 電腦版字體更大 */
+            .piece { font-size: 2.5rem; }
 
-            .prison-label { writing-mode: horizontal-tb; margin-bottom: 15px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.2); width: 100%; text-align: center; font-size: 0.9rem; padding-bottom: 5px; }
+            .prison-label { margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); width: 100%; text-align: center; font-size: 0.9rem; padding-bottom: 5px; }
             .prisoner-scroll { flex-direction: column; overflow-x: hidden; overflow-y: auto; align-items: center; gap: 10px; padding: 10px 0; }
             .prisoner-scroll .piece { width: 45px; height: 45px; font-size: 1.2rem; }
         }
@@ -234,20 +230,17 @@
             <div class="turn-indicator" id="turn-badge">WAITING</div>
         </div>
         
-        <!-- 左/上戰俘區 -->
         <div class="prison-bar" id="prison-blk-container" style="border-color: var(--neon-blue);">
             <div class="prison-label">CAPTURED_BLK</div>
             <div class="prisoner-scroll" id="black-prison"></div>
         </div>
 
-        <!-- 中央棋盤 -->
         <div class="board-container">
             <div class="chess-board" id="board">
                 <div class="fx-container" id="fx-layer"></div>
             </div>
         </div>
 
-        <!-- 右/下戰俘區 -->
         <div class="prison-bar" id="prison-red-container" style="border-color: var(--neon-red);">
             <div class="prison-label">CAPTURED_RED</div>
             <div class="prisoner-scroll" id="red-prison"></div>
