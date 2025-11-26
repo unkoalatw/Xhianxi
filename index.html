@@ -3,23 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>機核覺醒：遊戲大廳 (NEURAL HUB)</title>
+    <title>機核覺醒：戰術中樞 (NEURAL CORE)</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #020205;
-            --neon-blue: #00e5ff;
-            --neon-red: #ff3366;
+            --bg-color: #050510;
+            --neon-blue: #00f3ff;
+            --neon-red: #ff0055;
             --neon-green: #39ff14;
-            --neon-yellow: #fcee0a;
-            --glass-bg: rgba(255, 255, 255, 0.03);
-            --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+            --neon-purple: #bc13fe;
+            --glass-bg: rgba(255, 255, 255, 0.05);
         }
 
         * {
             box-sizing: border-box;
             user-select: none;
-            cursor: none; /* 隱藏預設游標，使用戰術游標 */
+            cursor: none; /* 全域隱藏游標 */
         }
 
         body {
@@ -28,597 +27,617 @@
             background-color: var(--bg-color);
             color: #fff;
             font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
-            overflow: hidden;
-            height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto; /* 允許垂直滾動以適應小螢幕 */
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            perspective: 1000px;
+            perspective: 1200px;
         }
 
-        /* --- 背景特效 --- */
-        .cyber-grid {
-            position: absolute;
-            top: 0; left: 0; width: 200%; height: 200%;
-            background: 
-                linear-gradient(rgba(0, 229, 255, 0.1) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 229, 255, 0.1) 1px, transparent 1px);
-            background-size: 60px 60px;
-            transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px);
-            animation: grid-scroll 20s linear infinite;
+        /* --- 霓虹 HUD 裝飾層 --- */
+        .hud-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 800;
+        }
+
+        .hud-corner {
+            position: absolute; width: 40px; height: 40px;
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 10px var(--neon-blue);
+            opacity: 0.8;
+            transition: all 0.5s;
+        }
+        .tl { top: 30px; left: 30px; border-right: none; border-bottom: none; border-top-left-radius: 10px; }
+        .tr { top: 30px; right: 30px; border-left: none; border-bottom: none; border-top-right-radius: 10px; }
+        .bl { bottom: 30px; left: 30px; border-right: none; border-top: none; border-bottom-left-radius: 10px; }
+        .br { bottom: 30px; right: 30px; border-left: none; border-top: none; border-bottom-right-radius: 10px; }
+
+        .hud-line {
+            position: absolute; background: var(--neon-blue);
+            box-shadow: 0 0 8px var(--neon-blue);
+            opacity: 0.5;
+        }
+        .hl-top { top: 50px; left: 50%; transform: translateX(-50%); width: 30%; height: 1px; }
+        .hl-bot { bottom: 50px; left: 50%; transform: translateX(-50%); width: 50%; height: 1px; }
+
+        /* 地平線光暈 */
+        .horizon-glow {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 30vh;
+            background: linear-gradient(to top, rgba(0, 243, 255, 0.1), transparent);
+            z-index: -1; pointer-events: none;
+        }
+
+        /* --- CRT 螢幕特效層 --- */
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            z-index: 900;
+            pointer-events: none;
+        }
+        
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 50%, black 150%);
+            z-index: 901;
+            pointer-events: none;
+        }
+
+        /* --- Canvas 背景 --- */
+        #starfield-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: -2;
-            opacity: 0.4;
-            pointer-events: none;
         }
 
-        @keyframes grid-scroll {
-            0% { transform: perspective(500px) rotateX(60deg) translateY(0) translateZ(-200px); }
-            100% { transform: perspective(500px) rotateX(60deg) translateY(60px) translateZ(-200px); }
-        }
-
-        .particles {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: -1;
-            pointer-events: none;
-        }
-
-        /* --- 戰術游標 --- */
+        /* --- 戰術游標系統 --- */
         #cursor-follower {
-            position: fixed;
-            top: 0; left: 0;
-            width: 40px; height: 40px;
-            border: 1px dashed var(--neon-blue);
-            border-radius: 50%;
+            position: fixed; pointer-events: none; z-index: 9999;
             transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 9999;
-            transition: width 0.2s, height 0.2s, border-color 0.2s;
+            mix-blend-mode: screen;
+        }
+        
+        .cursor-ring {
+            width: 40px; height: 40px;
+            border: 2px solid var(--neon-blue);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--neon-blue);
+            transition: 0.1s transform, 0.2s width, 0.2s height, 0.2s border-color;
             display: flex; justify-content: center; align-items: center;
         }
-        #cursor-follower::after {
-            content: ''; width: 4px; height: 4px; background: var(--neon-blue);
+        
+        .cursor-dot {
+            width: 4px; height: 4px; background: var(--neon-blue);
+            box-shadow: 0 0 8px #fff;
+            position: absolute;
         }
-        #cursor-follower.active {
+
+        #cursor-follower.attack .cursor-ring {
             width: 60px; height: 60px;
             border-color: var(--neon-red);
-            border-style: solid;
-            animation: rotate-cursor 1s linear infinite;
+            border-style: dashed;
+            box-shadow: 0 0 20px var(--neon-red);
+            animation: rotate-cursor 2s linear infinite;
+            background: rgba(255, 0, 85, 0.1);
         }
-        @keyframes rotate-cursor { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
-
-        .cursor-coords {
-            position: absolute;
-            top: -20px; left: 40px;
-            font-size: 10px;
-            color: var(--neon-blue);
-            font-family: monospace;
-            white-space: nowrap;
+        
+        .cursor-trail {
+            position: fixed; width: 6px; height: 6px;
+            background: var(--neon-blue);
+            box-shadow: 0 0 8px var(--neon-blue);
+            border-radius: 50%;
+            pointer-events: none; z-index: 9998;
+            opacity: 0.5;
+            transition: opacity 0.5s;
         }
 
-        /* --- 啟動畫面 --- */
-        #boot-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000;
-            z-index: 9999;
-            display: flex; flex-direction: column; justify-content: flex-end; padding: 50px;
-            font-family: 'Courier New', monospace;
-            color: var(--neon-green);
-            font-size: 14px;
-            line-height: 1.5;
-            transition: opacity 0.5s ease-out;
-            cursor: auto; 
-        }
-        .boot-line { opacity: 0; animation: type-line 0.1s forwards; }
-        @keyframes type-line { to { opacity: 1; } }
+        @keyframes rotate-cursor { 100% { transform: rotate(360deg); } }
 
-        /* --- Glitch 主標題 --- */
+        /* --- 主標題 --- */
         .main-header {
             text-align: center;
             z-index: 10;
-            margin-bottom: 40px;
+            margin: 40px 0;
             position: relative;
+            transform-style: preserve-3d;
+            flex-shrink: 0;
         }
 
-        /* Glitch Effect CSS */
         h1 {
-            font-size: 3.5rem;
+            font-size: clamp(2.5rem, 5vw, 4rem); /* RWD Font Size */
             margin: 0;
-            letter-spacing: 5px;
+            letter-spacing: 10px;
             color: #fff;
             position: relative;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5);
-        }
-        
-        h1::before, h1::after {
-            content: attr(data-text);
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg-color);
-        }
-        
-        h1::before {
-            left: 2px;
-            text-shadow: -1px 0 var(--neon-red);
-            clip-path: inset(44% 0 61% 0);
-            animation: glitch-anim 2s infinite linear alternate-reverse;
-        }
-        
-        h1::after {
-            left: -2px;
-            text-shadow: -1px 0 var(--neon-blue);
-            clip-path: inset(50% 0 30% 0);
-            animation: glitch-anim 2s infinite linear alternate-reverse;
-            animation-delay: 1s;
+            text-shadow: 
+                0 0 5px #fff,
+                0 0 10px #fff,
+                0 0 20px var(--neon-blue),
+                0 0 40px var(--neon-blue);
+            animation: text-flicker 4s infinite alternate;
         }
 
-        @keyframes glitch-anim {
-            0% { clip-path: inset(40% 0 61% 0); }
-            20% { clip-path: inset(92% 0 1% 0); }
-            40% { clip-path: inset(43% 0 1% 0); }
-            60% { clip-path: inset(25% 0 58% 0); }
-            80% { clip-path: inset(54% 0 7% 0); }
-            100% { clip-path: inset(58% 0 43% 0); }
+        @keyframes text-flicker {
+            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+                text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px var(--neon-blue), 0 0 40px var(--neon-blue);
+            }
+            20%, 24%, 55% { text-shadow: none; }
         }
-
+        
         .subtitle {
             font-size: 1rem;
-            color: var(--neon-blue);
-            letter-spacing: 3px;
-            opacity: 0.8;
+            color: var(--neon-green);
+            letter-spacing: 4px;
             margin-top: 10px;
+            font-family: monospace;
+            opacity: 0.8;
+            text-shadow: 0 0 10px var(--neon-green);
         }
 
-        /* --- 全息核心 --- */
-        .holo-core-container {
+        /* --- 3D 核心 --- */
+        .holo-core-wrapper {
             position: relative;
-            width: 120px;
-            height: 120px;
-            margin-bottom: 50px;
+            width: 140px; height: 140px;
+            margin-bottom: 40px;
             transform-style: preserve-3d;
-            animation: float 4s ease-in-out infinite;
-            z-index: 5;
+            perspective: 600px;
+            flex-shrink: 0;
         }
 
-        .core-inner {
-            position: absolute;
-            width: 100%; height: 100%;
+        .holo-ring {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border: 2px solid rgba(255,255,255,0.1);
             border-radius: 50%;
-            border: 2px dashed var(--neon-blue);
-            box-shadow: 0 0 30px var(--neon-blue), inset 0 0 30px var(--neon-blue);
-            animation: spin-core 10s linear infinite;
-            transition: 0.5s;
+            border-top: 2px solid var(--neon-blue);
+            border-bottom: 2px solid var(--neon-blue);
+            box-shadow: 0 0 15px var(--neon-blue);
+            animation: spin 4s linear infinite;
         }
         
-        .core-center {
-            position: absolute;
-            top: 50%; left: 50%;
+        .holo-ring:nth-child(2) {
+            width: 80%; height: 80%; top: 10%; left: 10%;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-left: 2px solid var(--neon-red);
+            border-right: 2px solid var(--neon-red);
+            box-shadow: 0 0 15px var(--neon-red);
+            animation: spin-rev 6s linear infinite;
+        }
+
+        .core-sphere {
+            position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 40%; height: 40%;
-            background: #fff;
+            width: 40px; height: 40px;
+            background: radial-gradient(circle, #fff 0%, var(--neon-blue) 60%, transparent 100%);
+            box-shadow: 0 0 40px var(--neon-blue), 0 0 80px var(--neon-blue);
             border-radius: 50%;
-            box-shadow: 0 0 50px #fff;
-            animation: pulse-core 2s infinite;
+            animation: pulse 2s ease-in-out infinite;
         }
 
-        .core-ring {
-            position: absolute;
-            top: -20%; left: -20%;
-            width: 140%; height: 140%;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-left: 2px solid var(--neon-blue);
-            border-right: 2px solid var(--neon-blue);
-            animation: spin-reverse 6s linear infinite;
-        }
+        @keyframes spin { 0% { transform: rotateX(60deg) rotateZ(0deg); } 100% { transform: rotateX(60deg) rotateZ(360deg); } }
+        @keyframes spin-rev { 0% { transform: rotateX(-60deg) rotateZ(360deg); } 100% { transform: rotateX(-60deg) rotateZ(0deg); } }
+        @keyframes pulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } 50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; box-shadow: 0 0 60px var(--neon-blue), 0 0 100px var(--neon-blue); } }
 
-        /* --- 遊戲選單卡片 (含 3D Tilt) --- */
+        /* --- 遊戲卡片 (液態玻璃風格) --- */
         .card-container {
             display: flex;
+            flex-wrap: wrap; /* 關鍵：允許換行 */
+            justify-content: center;
             gap: 40px;
             z-index: 10;
-            perspective: 1000px;
+            width: 100%;
+            max-width: 1200px;
+            padding: 0 20px 40px 20px;
         }
 
         .game-card {
-            width: 280px;
-            height: 360px;
-            background: var(--glass-bg);
-            border: var(--glass-border);
-            backdrop-filter: blur(10px);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: space-between;
-            padding: 30px 20px;
-            cursor: none; /* 讓自定義游標顯示 */
-            transition: box-shadow 0.3s, border-color 0.3s; /* 移除 transform transition 以配合 JS 即時運算 */
+            flex: 1 1 280px; /* 彈性寬度：基礎 280px，可伸展 */
+            max-width: 350px;
+            height: 420px;
+            
+            /* 液態玻璃核心樣式 */
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px) saturate(180%); /* 高模糊與飽和度 */
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 1px solid rgba(255, 255, 255, 0.4); /* 頂部高光 */
+            border-left: 1px solid rgba(255, 255, 255, 0.4); /* 左側高光 */
+            
+            box-shadow: 
+                0 8px 32px 0 rgba(0, 0, 0, 0.37), /* 深邃陰影 */
+                inset 0 0 20px rgba(255, 255, 255, 0.05); /* 內部光澤 */
+            
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             position: relative;
-            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
             text-decoration: none;
+            overflow: hidden;
             transform-style: preserve-3d;
         }
 
+        /* 液態流動背景 */
         .game-card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 4px;
-            background: currentColor;
-            box-shadow: 0 0 15px currentColor;
-            transition: 0.3s;
+            top: -50%; left: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle at center, rgba(0, 243, 255, 0.1), transparent 50%);
+            opacity: 0;
+            transform: rotate(0deg);
+            transition: opacity 0.5s;
+            pointer-events: none;
+            z-index: -1;
         }
 
-        .game-card:hover {
-            background: rgba(255, 255, 255, 0.05);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            border-color: currentColor;
+        .game-card:hover { 
+            transform: translateY(-10px) scale(1.02);
+            box-shadow: 
+                0 20px 40px 0 rgba(0, 0, 0, 0.5),
+                inset 0 0 30px rgba(255, 255, 255, 0.1);
+        }
+        
+        .game-card:hover::before {
+            opacity: 1;
+            animation: liquid-spin 10s linear infinite;
         }
 
-        .card-content {
-            transform: translateZ(30px); /* 內容浮起來 */
-            display: flex; flex-direction: column; align-items: center;
-        }
+        @keyframes liquid-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* 顏色主題 */
+        .card-chess:hover { border-color: rgba(255, 51, 102, 0.5); }
+        .card-chess:hover::before { background: radial-gradient(circle at center, rgba(255, 51, 102, 0.2), transparent 60%); }
+        
+        .card-dark:hover { border-color: rgba(0, 229, 255, 0.5); }
+        .card-dark:hover::before { background: radial-gradient(circle at center, rgba(0, 229, 255, 0.2), transparent 60%); }
 
         .card-icon {
-            font-size: 4rem;
-            margin: 20px 0;
-            filter: drop-shadow(0 0 10px currentColor);
+            font-size: 5rem; margin-bottom: 30px;
             transition: 0.3s;
-            transform: translateZ(50px); /* 圖示浮更高 */
+            filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+            transform: translateZ(40px);
         }
-
+        
         .game-title {
-            font-size: 1.5rem;
-            font-weight: 900;
-            color: #fff;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-align: center;
+            font-size: 1.8rem; font-weight: 900; color: #fff;
+            letter-spacing: 2px; text-align: center;
+            transform: translateZ(30px);
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
         .game-desc {
-            font-family: 'Noto Sans TC';
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.7);
-            text-align: center;
-            line-height: 1.6;
-            margin-top: 10px;
-        }
-
-        .play-btn {
-            margin-top: 20px;
-            padding: 10px 30px;
-            border: 1px solid currentColor;
-            background: transparent;
-            color: inherit;
-            font-family: 'Orbitron';
-            font-weight: bold;
-            letter-spacing: 2px;
-            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-            transition: 0.3s;
+            font-family: 'Noto Sans TC'; font-size: 0.95rem;
+            color: rgba(255,255,255,0.8); text-align: center;
+            margin-top: 15px; line-height: 1.6;
             transform: translateZ(20px);
+            padding: 0 20px;
         }
 
-        .game-card:hover .play-btn {
-            background: currentColor;
-            color: #000;
-            box-shadow: 0 0 20px currentColor;
-        }
-
-        .card-chess { color: var(--neon-red); }
-        .card-dark { color: var(--neon-blue); }
-
-        /* 掃描線遮罩 */
-        .scanline {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.5) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 100;
-            opacity: 0.3;
-        }
-
-        /* 音效開關 */
-        .sound-toggle {
-            position: fixed; top: 20px; right: 20px;
-            z-index: 200;
-            color: var(--neon-green);
-            border: 1px solid var(--neon-green);
-            padding: 5px 15px;
-            font-size: 12px;
-            cursor: pointer;
-            opacity: 0.7;
+        .play-indicator {
+            margin-top: 40px; padding: 10px 25px;
+            font-size: 0.9rem; letter-spacing: 2px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            transform: translateZ(20px);
             transition: 0.3s;
+            backdrop-filter: blur(5px);
         }
-        .sound-toggle:hover { opacity: 1; background: rgba(57, 255, 20, 0.1); }
-
-        .footer-status {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            font-size: 0.8rem;
-            color: #555;
-            letter-spacing: 2px;
+        
+        .game-card:hover .play-indicator {
+            background: #fff; color: #000; box-shadow: 0 0 20px rgba(255,255,255,0.5);
         }
 
-        /* RWD */
+        .card-chess .card-icon { color: var(--neon-red); }
+        .card-dark .card-icon { color: var(--neon-blue); }
+
+        /* --- UI 元素 --- */
+        .sound-toggle {
+            position: fixed; top: 30px; right: 30px; z-index: 100;
+            color: var(--neon-green); font-family: monospace; font-size: 14px;
+            cursor: pointer; padding: 5px 10px; border: 1px solid var(--neon-green);
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            border-radius: 4px;
+        }
+
+        .system-footer {
+            position: fixed; bottom: 20px; width: 100%;
+            text-align: center; font-family: monospace; color: var(--neon-blue); font-size: 12px;
+            z-index: 100; pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* --- RWD 優化 --- */
         @media (max-width: 768px) {
-            .card-container { flex-direction: column; gap: 20px; }
-            .game-card { width: 300px; height: 160px; flex-direction: row; padding: 15px; }
-            .card-icon { font-size: 2.5rem; margin: 0; }
-            .game-desc { display: none; }
-            .play-btn { padding: 5px 15px; font-size: 0.8rem; }
-            .game-title { font-size: 1.2rem; text-align: left; }
-            h1 { font-size: 2rem; }
-            .holo-core-container { transform: scale(0.7); margin-bottom: 20px; }
-            * { cursor: auto !important; } /* 手機版恢復正常游標 */
-            #cursor-follower { display: none; }
+            .hud-layer { display: none; } /* 手機隱藏外框以增加空間 */
+            h1 { margin-top: 20px; letter-spacing: 5px; }
+            .holo-core-wrapper { transform: scale(0.8); margin-bottom: 20px; }
+            .card-container { gap: 20px; padding-bottom: 60px; }
+            .game-card { height: 200px; flex-direction: row; padding: 20px; text-align: left; justify-content: flex-start; }
+            .card-icon { font-size: 3rem; margin: 0 20px 0 0; }
+            .game-desc { display: none; } /* 手機版隱藏描述 */
+            .play-indicator { display: none; }
+            .game-title { font-size: 1.4rem; text-align: left; }
+            
+            /* 手機恢復游標 */
+            * { cursor: auto !important; }
+            #cursor-follower, .cursor-trail { display: none; }
         }
 
-        @keyframes spin-core { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes spin-reverse { 0% { transform: rotate(360deg); } 100% { transform: rotate(0deg); } }
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
-        @keyframes pulse-core { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } 50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; } }
-
+        /* 啟動黑屏 */
+        #boot-layer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 99999;
+            display: flex; align-items: center; justify-content: center;
+            font-family: monospace; color: var(--neon-green);
+            text-shadow: 0 0 10px var(--neon-green);
+            flex-direction: column;
+            transition: opacity 0.8s;
+        }
     </style>
 </head>
 <body>
 
-    <div id="boot-screen"></div>
-    
-    <!-- 戰術游標 -->
-    <div id="cursor-follower">
-        <div class="cursor-coords" id="coords">X:000 Y:000</div>
+    <!-- 啟動畫面 -->
+    <div id="boot-layer">
+        <div style="font-size: 2rem; font-weight: bold;">NEURAL_BIOS v6.0</div>
+        <div id="boot-log" style="margin-top: 20px; color: #666;">Loading Liquid Interface...</div>
     </div>
 
-    <!-- 音效開關 -->
-    <div class="sound-toggle" id="btn-sound" onclick="toggleSound()">AUDIO: OFF</div>
+    <div class="crt-overlay"></div>
+    <div class="vignette"></div>
 
-    <div class="cyber-grid"></div>
-    <div class="scanline"></div>
-    <canvas class="particles" id="particle-canvas"></canvas>
+    <div class="hud-layer">
+        <div class="hud-corner tl"></div>
+        <div class="hud-corner tr"></div>
+        <div class="hud-corner bl"></div>
+        <div class="hud-corner br"></div>
+        <div class="hud-line hl-top"></div>
+        <div class="hud-line hl-bot"></div>
+    </div>
+
+    <div class="horizon-glow"></div>
+    <canvas id="starfield-canvas"></canvas>
+
+    <div id="cursor-follower">
+        <div class="cursor-ring"></div>
+        <div class="cursor-dot"></div>
+    </div>
+
+    <div class="sound-toggle" id="btn-sound" onclick="toggleSound()">[ AUDIO: OFF ]</div>
 
     <div class="main-header">
-        <h1 data-text="NEURAL HUB">NEURAL HUB</h1>
-        <div class="subtitle">機核覺醒 // 戰術接入平台</div>
+        <h1>NEURAL HUB</h1>
+        <div class="subtitle">TACTICAL COMMAND INTERFACE</div>
     </div>
 
-    <div class="holo-core-container" id="core">
-        <div class="core-ring"></div>
-        <div class="core-inner" id="core-glow"></div>
-        <div class="core-center"></div>
+    <div class="holo-core-wrapper">
+        <div class="holo-ring"></div>
+        <div class="holo-ring"></div>
+        <div class="core-sphere" id="core-light"></div>
     </div>
 
     <div class="card-container">
-        <!-- 象棋卡片 (含 3D Tilt 腳本) -->
+        <!-- 象棋 -->
         <a href="chinesechess.html" class="game-card card-chess" 
-           onmouseenter="onCardEnter('red')" onmouseleave="onCardLeave()" onmousemove="tiltCard(event, this)">
+           onmouseenter="onHoverGame('red')" onmouseleave="onLeaveGame()" onmousemove="tiltCard(event, this)">
             <div class="card-icon">帥</div>
-            <div class="card-content">
+            <div>
                 <div class="game-title">NEURAL CHESS</div>
-                <div class="game-desc">傳統戰術模擬<br>標準全域視野<br>機核運算引擎</div>
+                <div class="game-desc">傳統戰術模擬 / 機核引擎</div>
+                <div class="play-indicator">>> INITIATE</div>
             </div>
-            <div class="play-btn">INITIATE</div>
         </a>
 
-        <!-- 暗棋卡片 -->
-        <a href="darkchess.html" class="game-card card-dark" 
-           onmouseenter="onCardEnter('blue')" onmouseleave="onCardLeave()" onmousemove="tiltCard(event, this)">
+        <!-- 暗棋 -->
+        <a href="darkchess.html" class="game-card card-dark"
+           onmouseenter="onHoverGame('blue')" onmouseleave="onLeaveGame()" onmousemove="tiltCard(event, this)">
             <div class="card-icon">?</div>
-            <div class="card-content">
+            <div>
                 <div class="game-title">DARK CHESS</div>
-                <div class="game-desc">迷霧戰場<br>隱藏資訊博弈<br>反制運算法則</div>
+                <div class="game-desc">隱藏資訊博弈 / 迷霧戰場</div>
+                <div class="play-indicator">>> INITIATE</div>
             </div>
-            <div class="play-btn">INITIATE</div>
         </a>
     </div>
 
-    <div class="footer-status">
-        SYSTEM STATUS: ONLINE // USER_ID: GUEST // VER: 4.1.0 (GLITCH_UPDATE)
+    <div class="system-footer">
+        SYS_STATUS: OPTIMAL // LIQUID_UI: ACTIVE
     </div>
 
     <script>
-        // --- 0. 音效系統 (Web Audio Synth) ---
-        let audioCtx = null;
-        let isSoundOn = false;
-
-        function initAudio() {
-            if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
-        function toggleSound() {
-            isSoundOn = !isSoundOn;
-            const btn = document.getElementById('btn-sound');
-            btn.innerText = isSoundOn ? "AUDIO: ONLINE" : "AUDIO: OFF";
-            btn.style.color = isSoundOn ? "var(--neon-green)" : "#555";
-            btn.style.borderColor = isSoundOn ? "var(--neon-green)" : "#555";
-            if(isSoundOn) { initAudio(); playSfx(600, 0.1, 'sine'); } // Test sound
-        }
-
-        function playSfx(freq, decay, type='sine') {
-            if(!isSoundOn || !audioCtx) return;
-            if(audioCtx.state === 'suspended') audioCtx.resume();
-            
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(freq/2, audioCtx.currentTime + decay);
-            
-            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + decay);
-            
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            
-            osc.start();
-            osc.stop(audioCtx.currentTime + decay);
-        }
-
-        // --- 1. 戰術游標系統 ---
-        const cursor = document.getElementById('cursor-follower');
-        const coords = document.getElementById('coords');
+        // --- 1. Starfield ---
+        const canvas = document.getElementById('starfield-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let stars = [];
         let mouseX = 0, mouseY = 0;
-        let cursorX = 0, cursorY = 0;
+        let speedMult = 1;
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Star {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = (Math.random() - 0.5) * width * 2;
+                this.y = (Math.random() - 0.5) * height * 2;
+                this.z = Math.random() * 1000 + 500;
+            }
+            update() {
+                let offsetX = (mouseX - width/2) * 2;
+                let offsetY = (mouseY - height/2) * 2;
+                this.z -= (10 * speedMult);
+                if (this.z < 1) {
+                    this.reset();
+                    this.x += offsetX * 0.1;
+                    this.y += offsetY * 0.1;
+                }
+            }
+            draw() {
+                let sx = (this.x / this.z) * 500 + width / 2;
+                let sy = (this.y / this.z) * 500 + height / 2;
+                let px = (this.x / (this.z + 20 * speedMult)) * 500 + width / 2;
+                let py = (this.y / (this.z + 20 * speedMult)) * 500 + height / 2;
+                if (sx > 0 && sx < width && sy > 0 && sy < height) {
+                    let size = (1 - this.z / 1500) * 3;
+                    let alpha = (1 - this.z / 1500);
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(sx, sy);
+                    ctx.lineWidth = size;
+                    ctx.strokeStyle = `rgba(${100 + Math.random()*155}, ${200 + Math.random()*55}, 255, ${alpha})`;
+                    ctx.lineCap = 'round';
+                    ctx.stroke();
+                }
+            }
+        }
+        for(let i=0; i<400; i++) stars.push(new Star());
+        function animateStars() {
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.4)';
+            ctx.fillRect(0, 0, width, height);
+            stars.forEach(star => { star.update(); star.draw(); });
+            requestAnimationFrame(animateStars);
+        }
+        animateStars();
 
         document.addEventListener('mousemove', (e) => {
             mouseX = e.clientX;
             mouseY = e.clientY;
-            // 更新座標文字
-            coords.innerText = `X:${mouseX.toString().padStart(4, '0')} Y:${mouseY.toString().padStart(4, '0')}`;
         });
 
-        function animateCursor() {
-            // 平滑跟隨演算法
-            const speed = 0.15;
-            cursorX += (mouseX - cursorX) * speed;
-            cursorY += (mouseY - cursorY) * speed;
-            cursor.style.left = cursorX + 'px';
-            cursor.style.top = cursorY + 'px';
-            requestAnimationFrame(animateCursor);
-        }
-        animateCursor();
+        // --- 2. Cursor ---
+        const cursor = document.getElementById('cursor-follower');
+        const cursorRing = cursor.querySelector('.cursor-ring');
+        const trails = [];
+        const MAX_TRAILS = 12;
 
-        // --- 2. 3D Tilt 卡片效果 ---
+        document.addEventListener('mousemove', (e) => {
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+            
+            const trail = document.createElement('div');
+            trail.className = 'cursor-trail';
+            trail.style.left = e.clientX + 'px';
+            trail.style.top = e.clientY + 'px';
+            document.body.appendChild(trail);
+            trails.push({el: trail, life: 1.0});
+
+            if(trails.length > MAX_TRAILS) {
+                const old = trails.shift();
+                old.el.remove();
+            }
+        });
+
+        function animateTrails() {
+            trails.forEach((t, i) => {
+                t.life -= 0.05;
+                t.el.style.opacity = t.life;
+                t.el.style.transform = `translate(-50%, -50%) scale(${t.life})`;
+                if(t.life <= 0) {
+                    t.el.remove();
+                    trails.splice(i, 1);
+                }
+            });
+            requestAnimationFrame(animateTrails);
+        }
+        animateTrails();
+
+        // --- 3. Interaction (Simplified) ---
+        const coreLight = document.getElementById('core-light');
+
+        function onHoverGame(color) {
+            if(color === 'red') {
+                coreLight.style.background = 'radial-gradient(circle, #fff 0%, var(--neon-red) 60%, transparent 100%)';
+                coreLight.style.boxShadow = '0 0 60px var(--neon-red), 0 0 100px var(--neon-red)';
+                cursor.className = 'attack';
+            } else {
+                coreLight.style.background = 'radial-gradient(circle, #fff 0%, var(--neon-blue) 60%, transparent 100%)';
+                coreLight.style.boxShadow = '0 0 60px var(--neon-blue), 0 0 100px var(--neon-blue)';
+                cursor.className = 'attack';
+                cursorRing.style.borderColor = 'var(--neon-blue)';
+            }
+            speedMult = 5;
+            playSound(color === 'red' ? 600 : 800, 'square');
+        }
+
+        function onLeaveGame() {
+            coreLight.style.background = 'radial-gradient(circle, #fff 0%, var(--neon-blue) 60%, transparent 100%)';
+            coreLight.style.boxShadow = '0 0 40px var(--neon-blue), 0 0 80px var(--neon-blue)';
+            cursor.className = '';
+            cursorRing.style.borderColor = 'var(--neon-blue)';
+            speedMult = 1;
+        }
+
         function tiltCard(e, card) {
             const rect = card.getBoundingClientRect();
-            const x = e.clientX - rect.left; // x position within the element
-            const y = e.clientY - rect.top;  // y position within the element
-            
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            
-            const rotateX = ((y - centerY) / centerY) * -15; // Max 15deg rotation
-            const rotateY = ((x - centerX) / centerX) * 15;
-
-            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const rotateX = ((y - cy) / cy) * -15;
+            const rotateY = ((x - cx) / cx) * 15;
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
         }
 
-        function resetCard(card) {
-            card.style.transform = `perspective(1000px) rotateX(0) rotateY(0) scale(1)`;
-        }
+        // --- 4. Audio ---
+        let audioCtx = null;
+        let soundEnabled = false;
 
-        // --- 3. 核心互動 + 音效觸發 ---
-        const coreGlow = document.getElementById('core-glow');
-        const coreRing = document.querySelector('.core-ring');
-        
-        function onCardEnter(mode) {
-            setCore(mode);
-            cursor.classList.add('active'); // 游標變成攻擊模式
-            
-            // SFX: Hi-tech blip
-            if(mode === 'red') playSfx(800, 0.1, 'square');
-            else playSfx(1200, 0.1, 'sawtooth');
-        }
-
-        function onCardLeave() {
-            setCore('default');
-            cursor.classList.remove('active');
-            // Reset all cards tilt
-            document.querySelectorAll('.game-card').forEach(resetCard);
-        }
-
-        function setCore(mode) {
-            if (mode === 'red') {
-                coreGlow.style.borderColor = 'var(--neon-red)';
-                coreGlow.style.boxShadow = '0 0 50px var(--neon-red), inset 0 0 30px var(--neon-red)';
-                coreRing.style.borderLeftColor = 'var(--neon-red)';
-                coreRing.style.borderRightColor = 'var(--neon-red)';
-                coreGlow.style.animationDuration = '2s';
-            } else if (mode === 'blue') {
-                coreGlow.style.borderColor = 'var(--neon-blue)';
-                coreGlow.style.boxShadow = '0 0 50px var(--neon-blue), inset 0 0 30px var(--neon-blue)';
-                coreRing.style.borderLeftColor = 'var(--neon-blue)';
-                coreRing.style.borderRightColor = 'var(--neon-blue)';
-                coreGlow.style.animationDuration = '2s';
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('btn-sound');
+            if(soundEnabled) {
+                if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                btn.innerText = "[ AUDIO: ONLINE ]";
+                btn.style.color = "var(--neon-green)";
+                playSound(1200, 'sine');
             } else {
-                coreGlow.style.borderColor = 'var(--neon-green)';
-                coreGlow.style.boxShadow = '0 0 30px var(--neon-green), inset 0 0 30px var(--neon-green)';
-                coreRing.style.borderLeftColor = 'var(--neon-green)';
-                coreRing.style.borderRightColor = 'var(--neon-green)';
-                coreGlow.style.animationDuration = '10s';
+                btn.innerText = "[ AUDIO: OFF ]";
+                btn.style.color = "var(--neon-green)";
             }
         }
-        setCore('default');
 
-        // --- 4. 啟動序列 ---
-        const bootScreen = document.getElementById('boot-screen');
-        const bootText = [
-            "INITIALIZING NEURAL INTERFACE v4.1...",
-            "LOADING KERNEL MODULES... [OK]",
-            "MOUNTING FILE SYSTEM... /ROOT [OK]",
-            "ESTABLISHING SECURE CONNECTION... [ENCRYPTED]",
-            "CALIBRATING SENSORS... [DONE]",
-            "SYSTEM READY."
-        ];
-        let lineIndex = 0;
-        function typeBoot() {
-            if (lineIndex < bootText.length) {
-                const p = document.createElement('div');
-                p.className = 'boot-line';
-                p.innerText = "> " + bootText[lineIndex];
-                bootScreen.appendChild(p);
-                lineIndex++;
-                setTimeout(typeBoot, 100);
-            } else {
-                setTimeout(() => {
-                    bootScreen.style.opacity = '0';
-                    setTimeout(() => bootScreen.remove(), 500);
-                }, 400);
-            }
+        function playSound(freq, type) {
+            if(!soundEnabled || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(freq/4, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
         }
-        window.onload = typeBoot;
 
-        // --- 5. 粒子特效背景 ---
-        const canvas = document.getElementById('particle-canvas');
-        const ctx = canvas.getContext('2d');
-        let particles = [];
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-        window.addEventListener('resize', resize);
-        resize();
-
-        class Particle {
-            constructor() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.size = Math.random() * 2;
-                this.speedX = (Math.random() - 0.5) * 0.5;
-                this.speedY = (Math.random() - 0.5) * 0.5;
-                this.life = Math.random() * 1;
-            }
-            update() {
-                this.x += this.speedX; this.y += this.speedY;
-                if(this.x > canvas.width) this.x = 0; if(this.x < 0) this.x = canvas.width;
-                if(this.y > canvas.height) this.y = 0; if(this.y < 0) this.y = canvas.height;
-                this.life += 0.01;
-                this.alpha = (Math.sin(this.life * 5) + 1) / 2 * 0.5;
-            }
-            draw() {
-                ctx.fillStyle = `rgba(0, 229, 255, ${this.alpha})`;
-                ctx.fillRect(this.x, this.y, this.size, this.size);
-            }
-        }
-        for(let i=0; i<50; i++) particles.push(new Particle());
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            particles.forEach(p => { p.update(); p.draw(); });
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.05)';
-            ctx.lineWidth = 1;
-            for(let i=0; i<particles.length; i++) {
-                for(let j=i+1; j<particles.length; j++) {
-                    const dx = particles[i].x - particles[j].x;
-                    const dy = particles[i].y - particles[j].y;
-                    if(Math.sqrt(dx*dx + dy*dy) < 100) {
-                        ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y); ctx.stroke();
-                    }
+        // --- 5. Boot ---
+        window.onload = () => {
+            const bootLayer = document.getElementById('boot-layer');
+            const log = document.getElementById('boot-log');
+            const msgs = ["LOADING KERNEL...", "MOUNTING VIRTUAL DRIVES...", "ACCESS GRANTED."];
+            let i = 0;
+            const interval = setInterval(() => {
+                if(i < msgs.length) { log.innerText = msgs[i]; i++; } 
+                else {
+                    clearInterval(interval);
+                    bootLayer.style.opacity = 0;
+                    setTimeout(() => bootLayer.remove(), 800);
                 }
-            }
-            requestAnimationFrame(animate);
-        }
-        animate();
+            }, 250);
+        };
     </script>
 </body>
 </html>
